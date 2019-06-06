@@ -12,6 +12,7 @@ import numpy as np
 from sklearn.svm import SVC
 from collections import Counter
 from sklearn.metrics import accuracy_score
+import pickle
 
 from sklearn.ensemble import RandomForestClassifier
 from copy import deepcopy
@@ -27,8 +28,8 @@ class Tokenizer:
         self.tokens=np.array(sentence.split(" "))
         
     def lemmatize(self,token):
-        if re.findall(r'^.*(हरु|मा|को|ले|लाई|हरू|बाट|समेत|बीच|का|सहित|गरी|सँग|देखि|छैन|भरी)$', token):
-                token = re.findall(r'^(.*)(?:हरु|मा|को|ले|लाई|हरू|बाट|समेत|बीच|का|सहित|गरी|सँग|देखि|छैन|भरी)$', token)
+        if re.findall(r'^.*(हरु|सम्म|मा|को|ले|दै|लाई|हरू|बाट|समेत|बीच|का|सहित|गरी|सँग|देखि|छैन|भरी)$', token):
+                token = re.findall(r'^(.*)(?:हरु|दै|सम्म|मा|को|ले|लाई|हरू|बाट|समेत|बीच|का|सहित|गरी|सँग|देखि|छैन|भरी)$', token)
                 token=token[0]
         return token
         
@@ -99,9 +100,10 @@ class tfidfVectorizer:
     
     wordSet=np.array([])
     
+    wordlist=[]
     
     #wordDictinoary
-    wordDict={} #not Used currently
+    wordDict={} 
      
     #contains tokens sets of all articles
     tokens_set=[]
@@ -112,6 +114,11 @@ class tfidfVectorizer:
     
     #number of Documents
     N=0
+    
+    def get_category(self,art_id):
+        for key,value in self.category.items():
+            if(value==art_id[0]):
+                return key
     
     def get_TFIDF(self):
         return self.tfidf;
@@ -260,22 +267,29 @@ class tfidfVectorizer:
         '''
         
         start=time.time()
+        
+        self.tfidf=np.zeros((self.N,len(self.wordSet)))
+        self.wordlist=list(self.wordSet)
+        
         for i in range(self.N):
             #print("Article " +  str(i) + " -> Y : " + str(self.Y[i]))
             #for each article
             tokens=self.tokens_set[i]
             #counter=Counter(tokens)
             words_count=len(tokens)
-            article_tfidf=np.empty((0,len(self.wordSet)))
-            for index,token in enumerate(self.wordSet):
-                #computing TF (Number of word appear in article / total number words in document)  
-                
-                #tf = counter[token]/words_count
-                tf=self.wordDict[token][i]/words_count
-                tf_idf_only = tf*idf[index]
-                article_tfidf=np.append(article_tfidf,tf_idf_only)
-            self.tfidf=np.vstack([self.tfidf,article_tfidf])
+            for index,token in enumerate(tokens):
+                try:
+                    #computing TF (Number of word appear in article / total number words in document)  
+                    
+                    #tf = counter[token]/words_count
+                    tf=self.wordDict[token][i]/words_count
+                    tf_idf_only = tf*idf[index]
+                    wordindex=self.wordlist.index(token)
+                    self.tfidf[i][wordindex]=tf_idf_only
+                except:
+                    continue;
         end=time.time()
+        #del self.wordDict
         
         print("Time : " +str(end - start))
         
@@ -348,27 +362,79 @@ class tfidfVectorizer:
             Computing TFIDF-Test Data
         '''
         
-    
-    
+        x_test=np.zeros((self.N,len(self.wordSet)))
+                
+        print("\nComputing TFIDF-test Data")
         for i in range(self.N):
             #print("Article " +  str(i) + " -> Y : " + str(y_test[i]))
             #for each article
             tokens=test_token_set[i]
-            counter=Counter(tokens)
+            #counter=Counter(tokens)
             words_count=len(tokens)
-            article_tfidf=np.empty((0,len(self.wordSet)))
-            for index,token in enumerate(self.wordSet):
-                #computing TF (Number of word appear in article / total number words in document)  
-                tf = counter[token]/float(words_count)
-                tf_idf_only = tf*self.idf[index]
-                article_tfidf=np.append(article_tfidf,tf_idf_only)
-            x_test=np.vstack([x_test,article_tfidf])
+            for index,token in enumerate(tokens):
+                try:
+                    #computing TF (Number of word appear in article / total number words in document)  
+                    #tf = counter[token]/float(words_count)
+                    tf=test_wordDict[token][i]/float(words_count)
+                    tf_idf_only = tf*self.idf[index]
+                    wordindex=self.wordlist.index(token)
+                    x_test[i][wordindex]=tf_idf_only
+                except:
+                    continue
             
         print("Testing data load - completed")
         del test_token_set
+        
        
         return x_test,y_test
         
+
+    def transform_article(self,article):
+        token_set=[]
+        wordDict={}
+        
+        #make tokens of the article
+        self.tokenizer.makeTokens(article)
+        
+        #remove stop words from the tokens
+        self.tokenizer.remove_stop_words()
+        
+        #append the token-set of the article to the article-tokens list
+        token_set.append(self.tokenizer.get_tokens())
+        
+        for index,each_word in enumerate(self.wordSet):
+            wordDict[each_word]=0.0
+            
+        
+        for index,tokens in enumerate(token_set):
+            for each_token in tokens:
+                try:
+                    wordDict[each_token]+=1
+                except:
+                    continue;
+        
+        x_test=np.zeros((1,len(self.wordSet)))
+                
+        print("\nComputing TFIDF-test Data")
+        tokens=token_set[0]
+        words_count=len(tokens)
+        for index,token in enumerate(tokens):
+            try:
+                #computing TF (Number of word appear in article / total number words in document)  
+                #tf = counter[token]/float(words_count)
+                tf=wordDict[token]/float(words_count)
+                tf_idf_only = tf*self.idf[index]
+                wordindex=self.wordlist.index(token)
+                x_test[0][wordindex]=tf_idf_only
+            except:
+                continue
+            
+        print("Testing data load - completed")
+        del token_set
+        
+       
+        return x_test
+                    
 
 #files containing stop words
 Stop_word_file='nepali'
@@ -404,6 +470,15 @@ svm_linear.fit(vectorized_x,yTrain)
 random_forest.fit(vectorized_x,yTrain)
 
 
+print("Creating Model Pickle")
+#linearPickle='linearPickle.sav'
+#rbfPickle='rbfPickle.sav'
+#randomForestPickle='randomForestPickle.sav'
+
+#pickle.dump(svm_linear,open(linearPickle,'wb'))
+#pickle.dump(svm,open(rbfPickle,'wb'))
+#pickle.dump(random_forest,open(randomForestPickle,'wb'))
+
 print("Predicting the Test Data")
 y_pred=svm.predict(vectorized_test)
 rbf_kernel=accuracy_score(y_pred,ytest)*100
@@ -417,3 +492,21 @@ print("Calculating Accuracy")
 print("ACcuracy SVC Linear-kernel : " + str(linear_kernel))
 print("ACcuracy SVC rbf-kernel : " + str(rbf_kernel))
 print("ACcuracy random-Forest : " + str(random_accuracy))
+
+
+print("\n\n---------------------Predict Article-------------\n")
+
+print("(Enter 'Exit' to quit)\n")
+
+
+article=input("Enter Article:\t")
+while(article!='Exit'):    
+    x_vector=vectorizer.transform_article(article)
+    y_svm=svm.predict(x_vector)
+    y_linear=svm_linear.predict(x_vector)
+    y_random=random_forest.predict(x_vector)
+    print("SVM (rbf kernel ) : " + str(vectorizer.get_category(y_svm)))
+    print("SVM (linear kernel ) : " + str(vectorizer.get_category(y_linear)))
+    print("Random Forest : " + str(vectorizer.get_category(y_random)))
+    print("\n")
+    article=input("Enter Article")
