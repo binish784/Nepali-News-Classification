@@ -13,7 +13,7 @@ from sklearn.svm import SVC
 from collections import Counter
 from sklearn.metrics import accuracy_score
 import pickle
-
+import statistics
 from sklearn.ensemble import RandomForestClassifier
 from copy import deepcopy
 
@@ -127,6 +127,7 @@ class tfidfVectorizer:
         return self.Y;
     
     def fit_transform(self,path):
+        print('--------------------------------------------------------')
         print("Reading Training Data-sets : ")
         
         for files in os.walk(path):
@@ -173,6 +174,7 @@ class tfidfVectorizer:
                     
         print("\nWordSet Created\n")   
          
+        print('--------------------------------------------------------')
         
         '''
            Calculating Document Frequency
@@ -243,6 +245,8 @@ class tfidfVectorizer:
         print("WordCount Finished\n")        
         
         
+        print('--------------------------------------------------------')
+        
         self.tokens_set=np.array(self.tokens_set);
         #delete tokens in tokenizer class
         self.tokenizer.del_tokens();
@@ -271,6 +275,15 @@ class tfidfVectorizer:
         self.tfidf=np.zeros((self.N,len(self.wordSet)))
         self.wordlist=list(self.wordSet)
         
+        #create wordList file
+        wordListFile=open('wordList.txt','a',encoding='utf-8')
+        
+        print("Creating WordList File")
+        for word in self.wordlist:
+            wordListFile.write(word+"\n")
+        wordListFile.close()
+        print("WordList-File Created")
+        
         for i in range(self.N):
             #print("Article " +  str(i) + " -> Y : " + str(self.Y[i]))
             #for each article
@@ -283,8 +296,8 @@ class tfidfVectorizer:
                     
                     #tf = counter[token]/words_count
                     tf=self.wordDict[token][i]/words_count
-                    tf_idf_only = tf*idf[index]
                     wordindex=self.wordlist.index(token)
+                    tf_idf_only = tf*idf[wordindex]
                     self.tfidf[i][wordindex]=tf_idf_only
                 except:
                     continue;
@@ -292,6 +305,8 @@ class tfidfVectorizer:
         #del self.wordDict
         
         print("Time : " +str(end - start))
+        
+        print('--------------------------------------------------------')
         
     def transform(self,path):
         test_token_set=[]
@@ -344,12 +359,12 @@ class tfidfVectorizer:
     
         test_wordDict={}
     
-        print("Creating Word Dictionary")
+        #print("Creating Word Dictionary")
         for index,each_word in enumerate(self.wordSet):
             test_wordDict[each_word]=np.zeros((self.N))
             
             
-        print("\nManaging WordCount\n")
+        #print("\nManaging WordCount\n")
         
         for index,tokens in enumerate(test_token_set):
             for each_token in tokens:
@@ -364,7 +379,7 @@ class tfidfVectorizer:
         
         x_test=np.zeros((self.N,len(self.wordSet)))
                 
-        print("\nComputing TFIDF-test Data")
+        #print("\nComputing TFIDF-test Data")
         for i in range(self.N):
             #print("Article " +  str(i) + " -> Y : " + str(y_test[i]))
             #for each article
@@ -376,8 +391,8 @@ class tfidfVectorizer:
                     #computing TF (Number of word appear in article / total number words in document)  
                     #tf = counter[token]/float(words_count)
                     tf=test_wordDict[token][i]/float(words_count)
-                    tf_idf_only = tf*self.idf[index]
                     wordindex=self.wordlist.index(token)
+                    tf_idf_only = tf*self.idf[wordindex]
                     x_test[i][wordindex]=tf_idf_only
                 except:
                     continue
@@ -390,8 +405,14 @@ class tfidfVectorizer:
         
 
     def transform_article(self,article):
+        
+        
+        sentences=article.split("।");
         token_set=[]
         wordDict={}
+        for index,sentence in enumerate(sentences):
+            sentences[index] = re.sub('\\r\\ufeff|\\r\\n\\ufeff\\n|-|’\\n|।\\n|\\n|\,|\"|\'| \)|\(|\)| \{| \}| \[| \]|!|‘|’|“|”| \:-|\?|।|/|\—', '', sentence)
+        
         
         #make tokens of the article
         self.tokenizer.makeTokens(article)
@@ -404,7 +425,6 @@ class tfidfVectorizer:
         
         for index,each_word in enumerate(self.wordSet):
             wordDict[each_word]=0.0
-            
         
         for index,tokens in enumerate(token_set):
             for each_token in tokens:
@@ -414,7 +434,8 @@ class tfidfVectorizer:
                     continue;
         
         x_test=np.zeros((1,len(self.wordSet)))
-                
+    
+        
         print("\nComputing TFIDF-test Data")
         tokens=token_set[0]
         words_count=len(tokens)
@@ -429,10 +450,77 @@ class tfidfVectorizer:
             except:
                 continue
             
-        print("Testing data load - completed")
+        print("Article Preprocessing - completed")
         del token_set
         
-       
+        
+        '''
+        
+        Text Summarization happens here
+        
+        '''
+        
+        print('--------------------------------------------------------')
+        token_set=[]    
+        
+        for sentence in sentences:
+            self.tokenizer.makeTokens(sentence)
+            self.tokenizer.remove_stop_words()
+            token_set.append(self.tokenizer.get_tokens())
+        
+        for index,each_word in enumerate(self.wordSet):
+            wordDict[each_word]=np.zeros((len(token_set)))
+            
+        for index,tokens in enumerate(token_set):
+            for each_token in tokens:
+                try:
+                    wordDict[each_token][index]+=1
+                except:
+                    continue;
+        
+        sentences_tfidf=np.zeros((len(token_set),len(self.wordSet)))
+        
+        for i in range(len(token_set)):
+            #print("Article " +  str(i) + " -> Y : " + str(self.Y[i]))
+            #for each article
+            tokens=token_set[i]
+            #counter=Counter(tokens)
+            words_count=len(tokens)
+            for index,token in enumerate(tokens):
+                try:
+                    #computing TF (Number of word appear in sentence / total number words in article)  
+                    #tf = counter[token]/words_count
+                    tf=wordDict[token][i]/words_count
+                    wordindex=self.wordlist.index(token)
+                    tf_idf_only = tf*self.idf[wordindex]
+                    sentences_tfidf[i][wordindex]=tf_idf_only
+                except:
+                    continue; 
+        
+        sentences_sum=np.empty((0))
+        for sentence_tfidf in sentences_tfidf:
+            sum_tf=np.sum(sentence_tfidf)
+            sentences_sum=np.append(sentences_sum,sum_tf)
+        
+        total_sum=np.sum(sentences_sum)
+        #print("Article TF-IDF total :" + str(total_sum))
+        avg=total_sum/len(token_set);
+        #print("Average TF-IDF total :" + str(avg))
+        std_dev=statistics.stdev(sentences_sum)
+        #top 3 picks
+        #top_picks=sentences_sum.argsort()[-3:][::-1]
+        #for picks in top_picks:
+        #    print(sentences[picks])
+        #print("\n\n")
+        
+        print("Summary : \n")
+        
+        for index,sentence in enumerate(sentences_sum):
+            if sentence>=avg:
+                print(sentences[index])
+        
+        
+        print('--------------------------------------------------------')
         return x_test
                     
 
